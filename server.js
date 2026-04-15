@@ -15,12 +15,13 @@ const SYSTEM_PROMPT =
 const sessions = new Map();
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-async function aiResponse(messages) {
-  let completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: messages,
+async function aiResponse(conversation) {
+  const response = await openai.responses.create({
+    model: "gpt-5.4-mini",
+    instructions: SYSTEM_PROMPT,
+    input: conversation,
   });
-  return completion.choices[0].message.content;
+  return response.output_text;
 }
 
 const fastify = Fastify();
@@ -47,7 +48,7 @@ fastify.register(async function (fastify) {
           const callSid = message.callSid;
           console.log("Setup for call:", callSid);
           ws.callSid = callSid;
-          sessions.set(callSid, [{ role: "system", content: SYSTEM_PROMPT }]);
+          sessions.set(callSid, []);
           break;
         case "prompt":
           console.log("Processing prompt:", message.voicePrompt);
