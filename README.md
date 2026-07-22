@@ -60,10 +60,40 @@ Start the development server:
 node server.js
 ```
 
-## Run and test the app
+## Deploying to Render
 
-Call your Twilio phone number. After connection, you should be able to converse with the Open AI-powered AI Assistant, integrated over ConversationRelay with Twilio Voice!
+This codebase is pre-configured for seamless deployment to [Render](https://render.com).
 
-> [!NOTE] 
-> Customize the initial greeting and response behavior by modifying the aiResponse function and constants like SYSTEM_PROMPT in index.js.
-> Ensure that you update ngrok URLs each time you restart ngrok, as they change with each session.
+### Option 1: Blueprint Deployment (Recommended)
+
+1. Push your repository to GitHub or GitLab.
+2. Log in to [Render Dashboard](https://dashboard.render.com/) and click **New +** > **Blueprint**.
+3. Connect your repository. Render will automatically detect `render.yaml`.
+4. Fill in your `OPENAI_API_KEY` under Environment Variables.
+5. Click **Apply**.
+
+### Option 2: Manual Web Service Setup
+
+1. In the Render Dashboard, click **New +** > **Web Service**.
+2. Connect your Git repository.
+3. Configure the service settings:
+   - **Environment**: Node
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm start`
+   - **Health Check Path**: `/health`
+4. Add the following **Environment Variables**:
+   - `OPENAI_API_KEY`: Your OpenAI API key.
+   - `PORT`: `8080` (or leave default, Render sets `PORT` automatically).
+5. Click **Create Web Service**.
+
+### Configure Twilio Webhook for Render
+
+Once deployed, copy your Render Web Service URL (e.g., `https://twilio-cr-demo.onrender.com`).
+
+1. Open the [Twilio Console](https://console.twilio.com/).
+2. Navigate to **Phone Numbers** > **Active Numbers** > select your number.
+3. Under **Voice & Fax** -> **A CALL COMES IN**, set:
+   - **Webhook**: `https://<your-render-app>.onrender.com/twiml`
+   - **HTTP Method**: `POST` (or `GET`)
+4. Save the configuration and call your Twilio number to start conversing!
+

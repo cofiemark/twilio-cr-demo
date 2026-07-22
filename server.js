@@ -6,8 +6,10 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const PORT = process.env.PORT || 8080;
-const DOMAIN = process.env.NGROK_URL;
-const WS_URL = `wss://${DOMAIN}/ws`;
+// Render provides process.env.RENDER_EXTERNAL_HOSTNAME automatically.
+// Fallback to DOMAIN or NGROK_URL if specified.
+const DOMAIN = process.env.DOMAIN || process.env.RENDER_EXTERNAL_HOSTNAME || process.env.NGROK_URL;
+
 const WELCOME_GREETING =
   "Hi! I am a voice assistant powered by Twilio and Open A I . Ask me anything!";
 const SYSTEM_PROMPT =
@@ -27,12 +29,26 @@ async function aiResponse(conversation) {
 const fastify = Fastify();
 fastify.register(fastifyWs);
 fastify.register(fastifyFormBody);
+
+// Health check endpoint for Render service monitoring
+fastify.get("/", async (request, reply) => {
+  return { status: "ok", service: "Twilio ConversationRelay Voice Assistant" };
+});
+
+fastify.get("/health", async (request, reply) => {
+  return { status: "healthy" };
+});
+
 fastify.all("/twiml", async (request, reply) => {
+  // Use DOMAIN if defined, otherwise derive host automatically from request headers
+  const host = DOMAIN || request.headers.host;
+  const wsUrl = `wss://${host}/ws`;
+
   reply.type("text/xml").send(
     `<?xml version="1.0" encoding="UTF-8"?>
     <Response>
       <Connect>
-        <ConversationRelay url="${WS_URL}" welcomeGreeting="${WELCOME_GREETING}" />
+        <ConversationRelay url="${wsUrl}" welcomeGreeting="${WELCOME_GREETING}" />
       </Connect>
     </Response>`
   );
@@ -41,53 +57,62 @@ fastify.all("/twiml", async (request, reply) => {
 fastify.register(async function (fastify) {
   fastify.get("/ws", { websocket: true }, (ws, req) => {
     ws.on("message", async (data) => {
-      const message = JSON.parse(data);
+      try {
+        const message = JSON.parse(data);
 
-      switch (message.type) {
-        case "setup":
-          const callSid = message.callSid;
-          console.log("Setup for call:", callSid);
-          ws.callSid = callSid;
-          sessions.set(callSid, []);
-          break;
-        case "prompt":
-          console.log("Processing prompt:", message.voicePrompt);
-          const conversation = sessions.get(ws.callSid);
-          conversation.push({ role: "user", content: message.voicePrompt });
+        switch (message.type) {
+          case "setup":
+            const callSid = message.callSid;
+            console.log("Setup for call:", callSid);
+            ws.callSid = callSid;
+            sessions.set(callSid, []);
+            break;
+          case "prompt":
+            console.log("Processing prompt:", message.voicePrompt);
+            const conversation = sessions.get(ws.callSid);
+            if (!conversation) {
+              console.warn("No active session found for call:", ws.callSid);
+              break;
+            }
+            conversation.push({ role: "user", content: message.voicePrompt });
 
-          const response = await aiResponse(conversation);
-          conversation.push({ role: "assistant", content: response });
+            const response = await aiResponse(conversation);
+            conversation.push({ role: "assistant", content: response });
 
-          ws.send(
-            JSON.stringify({
-              type: "text",
-              token: response,
-              last: true,
-            })
-          );
-          console.log("Sent response:", response);
-          break;
-        case "interrupt":
-          console.log("Handling interruption.");
-          break;
-        default:
-          console.warn("Unknown message type received:", message.type);
-          break;
+            ws.send(
+              JSON.stringify({
+                type: "text",
+                token: response,
+                last: true,
+              })
+            );
+            console.log("Sent response:", response);
+            break;
+          case "interrupt":
+            console.log("Handling interruption.");
+            break;
+          default:
+            console.warn("Unknown message type received:", message.type);
+            break;
+        }
+      } catch (err) {
+        console.error("Error handling WebSocket message:", err);
       }
     });
 
     ws.on("close", () => {
       console.log("WebSocket connection closed");
-      sessions.delete(ws.callSid);
+      if (ws.callSid) {
+        sessions.delete(ws.callSid);
+      }
     });
   });
 });
 
 try {
-  fastify.listen({ port: PORT });
-  console.log(
-    `Server running at http://localhost:${PORT} and wss://${DOMAIN}/ws`
-  );
+  // MUST bind to 0.0.0.0 for Render / PaaS / Docker environments
+  await fastify.listen({ port: Number(PORT), host: "0.0.0.0" });
+  console.log(`Server listening on port ${PORT} (0.0.0.0)`);
 } catch (err) {
   fastify.log.error(err);
   process.exit(1);

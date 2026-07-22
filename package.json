@@ -1,18 +1,20 @@
 {
-  "name": "code",
+  "name": "twilio-cr-demo",
   "version": "1.0.0",
-  "main": "passkeys.js",
+  "main": "server.js",
   "directories": {
     "doc": "docs"
   },
   "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "type": "module",
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Twilio Voice ConversationRelay AI Assistant",
   "dependencies": {
     "@fastify/formbody": "^8.0.2",
     "@fastify/websocket": "^11.0.2",
